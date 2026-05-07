@@ -55,8 +55,8 @@ async function shuffle_only() {
     const shuffled = songs.length <= 10 ? swap_shuffle(songs) : batch_swap_shuffle(songs, size);
 
     const results = alt_shuffle
-        ? get_spread_batch_no_adjacent(shuffled, 100, size)
-        : get_spread_batch(shuffled, 100, size);
+        ? get_spread_batch_no_adjacent(shuffled, shuffled.length, size)
+        : get_spread_batch(shuffled, shuffled.length, size);
 
     RECENT_SPOTIFY_SHUFFLED_TRACKS = results;
     RECENT_SPOTIFY_PLAYBACK_PLAYLIST_ID = playlist_id;
