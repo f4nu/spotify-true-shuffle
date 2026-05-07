@@ -445,17 +445,24 @@ async function load_application() {
     document.getElementById('loader_container').setAttribute('style', 'display: none;');
 }
 
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
     // Ensure localStorage is available else browser is unsupported
     log('STARTUP', 'Checking for local storage support...');
     if (!local_storage_supported()) return ui_render_connect_button('Unsupported Browser', false);
 
-    // Attempt to parse hash parameters from spotify for oauth callback
+    // Attempt to parse authorization code from Spotify OAuth callback
     log('STARTUP', 'Parsing authentication connection parameters from Spotify...');
-    auth_parse_connection_parameters();
+    await auth_parse_connection_parameters();
 
     // Determine if a valid access token is available and load application
     if (auth_get_access_token()) return load_application();
+
+    // Try refreshing silently if we have a stored refresh token
+    if (auth_get_refresh_token()) {
+        log('STARTUP', 'Attempting silent token refresh...');
+        const token = await auth_refresh_access_token();
+        if (token) return load_application();
+    }
 
     // If the user has recently connected their account with the application, automatically reconnect with Spotify
     if (auth_has_recently_connected()) {

@@ -1,5 +1,5 @@
 // Get your own Spotify Client ID at https://developer.spotify.com/
-const AUTH_CLIENT_ID = '0e188cfad9f3470ca424b84c2dc532df';
+const AUTH_CLIENT_ID = '90c97590f6d84bf68e7a840d937d646d';
 const AUTH_MAX_RECENT_CONNECTION_AGE = 1000 * 60 * 60 * 24 * 7; // 7 days
 const AUTH_APPLICATION_SCOPES = [
     'playlist-modify-public',
@@ -55,6 +55,7 @@ function auth_validate_hash(hash) {
  * @param {Number} expiry
  */
 function auth_set_access_token(token, expiry) {
+    _auth_access_token_cache = undefined;
     localStorage.setItem('access_token', btoa(`${token}:${expiry.toString()}`));
     log('AUTHENTICATION', `Stored Spotify Access Token: [REDACTED] Expires: ${new Date(expiry).toLocaleString()}`);
 }
@@ -66,10 +67,7 @@ let _auth_access_token_cache;
  * @returns {String=}
  */
 function auth_get_access_token() {
-    // Check if the access token is cached
     if (_auth_access_token_cache) return _auth_access_token_cache;
-
-    // Check if the access token is stored in local storage
     const raw = localStorage.getItem('access_token');
     if (typeof raw == 'string') {
         const [token, expiry] = atob(raw).split(':');
@@ -78,61 +76,125 @@ function auth_get_access_token() {
     }
 }
 
-/**
- * Step 1: Redirects the user to the Spotify OAuth page to connect their account with the application.
- */
-function auth_connect_spotify() {
-    // Build the required parameters for the Spotify OAuth page
-    const integrity = auth_get_hash(60);
-    const callback_uri = encodeURIComponent(location.origin + location.pathname);
-    const scopes = encodeURIComponent(AUTH_APPLICATION_SCOPES);
+function auth_set_refresh_token(token) {
+    localStorage.setItem('refresh_token', token);
+}
 
-    // Update the UI to show the user that they are connecting
-    ui_render_connect_button('Connecting...', false);
-    log('AUTHENTICATION', `Redirecting to Spotify OAuth Page: ${callback_uri}`);
-
-    // Redirect the user to the Spotify OAuth page
-    location.href = `https://accounts.spotify.com/authorize?client_id=${AUTH_CLIENT_ID}&response_type=token&redirect_uri=${callback_uri}&state=${integrity}&scope=${scopes}`;
+function auth_get_refresh_token() {
+    return localStorage.getItem('refresh_token');
 }
 
 /**
- * Step 2: Parses the hash parameters from the Spotify OAuth page and attempts to connect the user's account with the application.
+ * Uses the stored refresh token to silently obtain a new access token.
+ *
+ * @returns {Promise<String|null>}
  */
-function auth_parse_connection_parameters() {
-    // Ensure the location hash is from Spotify
-    if (!location.hash.includes('#access_token=')) return (location.hash = '');
+async function auth_refresh_access_token() {
+    const refresh_token = auth_get_refresh_token();
+    if (!refresh_token) return null;
 
-    // Parse the hash parameters from Spotify
-    const parameters = {};
-    location.hash
-        .substring(1)
-        .split('&')
-        .forEach((chunk) => {
-            const [key, value] = chunk.split('=');
-            if (key && value) parameters[key] = decodeURIComponent(value);
+    try {
+        const response = await fetch('https://accounts.spotify.com/api/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                grant_type: 'refresh_token',
+                refresh_token,
+                client_id: AUTH_CLIENT_ID,
+            }),
         });
 
-    // Destructure the expected parameters
-    const { state, access_token, expires_in } = parameters;
+        if (!response.ok) {
+            localStorage.removeItem('refresh_token');
+            return null;
+        }
 
-    // Validate the expected parameters
-    if (
-        typeof state !== 'string' ||
-        typeof access_token !== 'string' ||
-        typeof expires_in !== 'string' ||
-        isNaN(+expires_in)
-    )
-        return (location.hash = '');
+        const data = await response.json();
+        auth_set_access_token(data.access_token, Date.now() + data.expires_in * 1000);
+        if (data.refresh_token) auth_set_refresh_token(data.refresh_token);
+        localStorage.setItem('last_connection_at', Date.now().toString());
+        return data.access_token;
+    } catch {
+        return null;
+    }
+}
 
-    // Validate the incoming integrity hash (state) with the stored hash
-    if (!auth_validate_hash(state)) return (location.hash = '');
+// PKCE helpers
 
-    // Store the access token and expiry time in local storage
-    auth_set_access_token(access_token, Date.now() + parseInt(expires_in) * 1000);
+function auth_generate_code_verifier(length = 128) {
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+    const values = crypto.getRandomValues(new Uint8Array(length));
+    return Array.from(values)
+        .map((x) => possible[x % possible.length])
+        .join('');
+}
 
-    // Store a timestamp marking this successful connection
-    localStorage.setItem('last_connection_at', Date.now().toString());
+async function auth_generate_code_challenge(verifier) {
+    const data = new TextEncoder().encode(verifier);
+    const digest = await crypto.subtle.digest('SHA-256', data);
+    return btoa(String.fromCharCode(...new Uint8Array(digest)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+}
 
-    // Empty the hash from the URL
-    location.hash = '';
+/**
+ * Step 1: Redirects the user to the Spotify OAuth page using Authorization Code + PKCE flow.
+ */
+async function auth_connect_spotify() {
+    const integrity = auth_get_hash(60);
+    const callback_uri = encodeURIComponent(location.origin + location.pathname);
+    const scopes = encodeURIComponent(AUTH_APPLICATION_SCOPES.join(' '));
+
+    const code_verifier = auth_generate_code_verifier();
+    const code_challenge = await auth_generate_code_challenge(code_verifier);
+    localStorage.setItem('code_verifier', code_verifier);
+
+    ui_render_connect_button('Connecting...', false);
+    log('AUTHENTICATION', `Redirecting to Spotify OAuth Page: ${callback_uri}`);
+
+    location.href = `https://accounts.spotify.com/authorize?client_id=${AUTH_CLIENT_ID}&response_type=code&redirect_uri=${callback_uri}&state=${integrity}&scope=${scopes}&code_challenge_method=S256&code_challenge=${code_challenge}`;
+}
+
+/**
+ * Step 2: Parses the authorization code from the Spotify OAuth redirect and exchanges it for tokens.
+ */
+async function auth_parse_connection_parameters() {
+    const params = new URLSearchParams(location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+
+    if (!code || !state) return;
+
+    // Clean the URL before any async work so the code can't be replayed on refresh
+    history.replaceState({}, '', location.origin + location.pathname + location.hash);
+
+    if (!auth_validate_hash(state)) return;
+
+    const code_verifier = localStorage.getItem('code_verifier');
+    if (!code_verifier) return;
+    localStorage.removeItem('code_verifier');
+
+    try {
+        const response = await fetch('https://accounts.spotify.com/api/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                grant_type: 'authorization_code',
+                code,
+                redirect_uri: location.origin + location.pathname,
+                client_id: AUTH_CLIENT_ID,
+                code_verifier,
+            }),
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        auth_set_access_token(data.access_token, Date.now() + data.expires_in * 1000);
+        if (data.refresh_token) auth_set_refresh_token(data.refresh_token);
+        localStorage.setItem('last_connection_at', Date.now().toString());
+    } catch {
+        // Token exchange failed silently; user will need to reconnect manually
+    }
 }
