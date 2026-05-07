@@ -57,6 +57,19 @@
                 <img src="assets/images/spotify_white.png" class="spotify-logo" />
             </div>
 
+            <div id="setup_section" class="container" style="margin-top: 12%; display: none;">
+                <div class="row">
+                    <div class="col-lg-6 col-md-9 col-sm-12 m-auto">
+                        <p class="landing-message">Enter your Spotify App Client ID to get started.</p>
+                        <input id="client_id_input" type="text" class="client-id-input"
+                            placeholder="e.g. 90c97590f6d84bf68e7a840d937d646d" />
+                        <button onclick="save_client_id()" class="auth-button">
+                            Save & Continue
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div id="auth_section" class="container" style="margin-top: 12%">
                 <div class="row">
                     <div class="col-lg-6 col-md-9 col-sm-12 m-auto">
@@ -64,6 +77,8 @@
                         <button id="connect_button" onclick="auth_connect_spotify()" class="auth-button">
                             Connect With Spotify
                         </button>
+                        <p class="landing-message mt-3" style="font-size: 0.8rem; opacity: 0.5; cursor: pointer;"
+                            onclick="forget_app_id()">Forget App ID</p>
                     </div>
                 </div>
             </div>

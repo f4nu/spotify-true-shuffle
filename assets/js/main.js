@@ -238,10 +238,30 @@ async function load_application() {
     document.getElementById('loader_container').setAttribute('style', 'display: none;');
 }
 
+function save_client_id() {
+    const input = document.getElementById('client_id_input').value.trim();
+    if (!input) return alert('Please enter a valid Client ID.');
+    auth_set_client_id(input);
+    document.getElementById('setup_section').style.display = 'none';
+    document.getElementById('auth_section').style.display = '';
+}
+
+function forget_app_id() {
+    auth_clear_all();
+    location.reload();
+}
+
 window.addEventListener('load', async () => {
     // Ensure localStorage is available else browser is unsupported
     log('STARTUP', 'Checking for local storage support...');
     if (!local_storage_supported()) return ui_render_connect_button('Unsupported Browser', false);
+
+    // Show the setup screen if no Client ID has been saved yet
+    if (!auth_get_client_id()) {
+        document.getElementById('setup_section').style.display = '';
+        document.getElementById('auth_section').style.display = 'none';
+        return;
+    }
 
     // Attempt to parse authorization code from Spotify OAuth callback
     log('STARTUP', 'Parsing authentication connection parameters from Spotify...');

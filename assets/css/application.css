@@ -67,6 +67,24 @@ body {
     user-select: none;
 }
 
+.client-id-input {
+    display: block;
+    padding: 1rem;
+    background-color: black;
+    border: 2px solid white;
+    border-radius: 10px;
+    color: white;
+    width: 100%;
+    margin: auto;
+    outline: none;
+    font-family: 'Poppins';
+    margin-top: 15px;
+}
+
+.client-id-input::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+}
+
 .page-select {
     display: block;
     padding: 1rem;

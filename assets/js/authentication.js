@@ -1,5 +1,3 @@
-// Get your own Spotify Client ID at https://developer.spotify.com/
-const AUTH_CLIENT_ID = '90c97590f6d84bf68e7a840d937d646d';
 const AUTH_MAX_RECENT_CONNECTION_AGE = 1000 * 60 * 60 * 24 * 7; // 7 days
 const AUTH_APPLICATION_SCOPES = [
     'playlist-modify-public',
@@ -76,6 +74,21 @@ function auth_get_access_token() {
     }
 }
 
+function auth_get_client_id() {
+    return localStorage.getItem('client_id');
+}
+
+function auth_set_client_id(id) {
+    localStorage.setItem('client_id', id.trim());
+}
+
+function auth_clear_all() {
+    _auth_access_token_cache = undefined;
+    ['client_id', 'access_token', 'refresh_token', 'last_connection_at', 'auth_hash', 'code_verifier'].forEach(
+        (key) => localStorage.removeItem(key)
+    );
+}
+
 function auth_set_refresh_token(token) {
     localStorage.setItem('refresh_token', token);
 }
@@ -100,7 +113,7 @@ async function auth_refresh_access_token() {
             body: new URLSearchParams({
                 grant_type: 'refresh_token',
                 refresh_token,
-                client_id: AUTH_CLIENT_ID,
+                client_id: auth_get_client_id(),
             }),
         });
 
@@ -153,7 +166,7 @@ async function auth_connect_spotify() {
     ui_render_connect_button('Connecting...', false);
     log('AUTHENTICATION', `Redirecting to Spotify OAuth Page: ${callback_uri}`);
 
-    location.href = `https://accounts.spotify.com/authorize?client_id=${AUTH_CLIENT_ID}&response_type=code&redirect_uri=${callback_uri}&state=${integrity}&scope=${scopes}&code_challenge_method=S256&code_challenge=${code_challenge}`;
+    location.href = `https://accounts.spotify.com/authorize?client_id=${auth_get_client_id()}&response_type=code&redirect_uri=${callback_uri}&state=${integrity}&scope=${scopes}&code_challenge_method=S256&code_challenge=${code_challenge}`;
 }
 
 /**
@@ -183,7 +196,7 @@ async function auth_parse_connection_parameters() {
                 grant_type: 'authorization_code',
                 code,
                 redirect_uri: location.origin + location.pathname,
-                client_id: AUTH_CLIENT_ID,
+                client_id: auth_get_client_id(),
                 code_verifier,
             }),
         });
