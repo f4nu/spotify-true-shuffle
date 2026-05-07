@@ -1,5 +1,5 @@
 # TrueShuffle: An open-source music shuffling web application for Spotify
-![alt text](/assets/images/meta-image.png)
+![alt text](/assets/images/meta-image.jpeg)
 
 ## Motivation
 After having Spotify play the same 40-50 songs repetitively from a playlist well over 1000 songs, I was done with their shuffle algorithm. TrueShuffle is a completely front-end based web application that interacts with the Spotify API to bring truly unbiased music shuffling to Spotify. It shuffles all of your music based on randomness and ensures sufficient sparseness so you finally get to hear songs from all over your playlist.
